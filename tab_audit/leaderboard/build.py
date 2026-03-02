@@ -14,33 +14,144 @@ HTML_TEMPLATE = """
 <title>TabAudit Leaderboard</title>
 <style>
 body {
-  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif;
-  margin: 24px;
-  background: #f4f7fb;
-  color: #162034;
+  font-family: "Avenir Next", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  margin: 0;
+  background:
+    radial-gradient(circle at 8% 0%, #dcf0ff 0%, transparent 24%),
+    radial-gradient(circle at 96% 8%, #eaefff 0%, transparent 22%),
+    #f4f8ff;
+  color: #162b4a;
 }
-h1 { margin-bottom: 8px; }
-table { border-collapse: collapse; width: 100%; background: white; border-radius: 8px; overflow: hidden; }
-th, td { border: 1px solid #d8e0ef; padding: 8px; text-align: left; font-size: 0.9rem; }
-th { background: #e9f0ff; cursor: pointer; }
-tr:nth-child(even) { background: #fafcff; }
-.ok { color: #106d39; font-weight: 600; }
-.failed { color: #b3261e; font-weight: 600; }
+.wrap { max-width: 1240px; margin: 24px auto 30px; padding: 0 16px; }
+.hero {
+  background: #fff;
+  border: 1px solid #d5e2f6;
+  border-radius: 14px;
+  box-shadow: 0 10px 24px rgba(15, 36, 68, 0.07);
+  padding: 18px;
+  margin-bottom: 14px;
+}
+h1 { margin: 2px 0 6px; }
+.sub { color: #5b6d89; margin: 0; }
+.stats { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+.pill {
+  border-radius: 999px;
+  border: 1px solid #d5e2f6;
+  background: #f7fbff;
+  padding: 6px 12px;
+  color: #3f5778;
+  font-size: 12px;
+  font-weight: 700;
+}
+.toolbar {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+input[type=\"search\"] {
+  width: 320px;
+  max-width: 100%;
+  border: 1px solid #cfddf3;
+  border-radius: 10px;
+  padding: 9px 12px;
+  background: #fff;
+}
+.table-wrap {
+  border: 1px solid #d5e2f6;
+  border-radius: 14px;
+  overflow: auto;
+  background: #fff;
+  box-shadow: 0 10px 24px rgba(15, 36, 68, 0.07);
+}
+table { border-collapse: separate; border-spacing: 0; width: 100%; min-width: 1040px; }
+th, td { border-bottom: 1px solid #e3ecf9; padding: 9px 10px; text-align: left; font-size: 0.9rem; }
+th {
+  background: #edf4ff;
+  cursor: pointer;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+tbody tr:nth-child(even) { background: #fbfdff; }
+tbody tr:hover { background: #f4f9ff; }
+.ok {
+  color: #0e8b4b;
+  font-weight: 700;
+  background: #eefdF3;
+  border: 1px solid #bae7cd;
+  border-radius: 999px;
+  display: inline-block;
+  padding: 2px 9px;
+}
+.failed {
+  color: #c0352b;
+  font-weight: 700;
+  background: #fff1ef;
+  border: 1px solid #f2c5c1;
+  border-radius: 999px;
+  display: inline-block;
+  padding: 2px 9px;
+}
+.num { font-variant-numeric: tabular-nums; }
+.score { font-weight: 700; color: #0a69c7; }
+@media (max-width: 640px) {
+  .wrap { margin-top: 14px; }
+}
 </style>
 </head>
 <body>
-<h1>TabAudit Leaderboard</h1>
-<p>Click column headers to sort.</p>
-<table id=\"leaderboard\"></table>
+<div class=\"wrap\">
+  <div class=\"hero\">
+    <h1>TabAudit Leaderboard</h1>
+    <p class=\"sub\">Ranked by quality score, tie-break by learnability score.</p>
+    <div class=\"stats\">
+      <span class=\"pill\">Datasets: <span id=\"stat-datasets\">0</span></span>
+      <span class=\"pill\">OK: <span id=\"stat-ok\">0</span></span>
+      <span class=\"pill\">Failed: <span id=\"stat-failed\">0</span></span>
+      <span class=\"pill\">Average Score: <span id=\"stat-avg\">0</span></span>
+    </div>
+  </div>
+  <div class=\"toolbar\">
+    <p class=\"sub\" style=\"margin:0;\">Click column headers to sort.</p>
+    <input id=\"search\" type=\"search\" placeholder=\"Filter by name/source/status...\" />
+  </div>
+  <div class=\"table-wrap\">
+    <table id=\"leaderboard\"></table>
+  </div>
+</div>
 <script>
 const data = {{ data_json }};
 const columns = {{ columns_json }};
 let sortCol = 'quality_score';
 let sortDesc = true;
+let query = '';
+
+function fmtValue(col, value) {
+  if (value === null || value === undefined || value === '') return '';
+  if (
+    [
+      'quality_score', 'cleanliness_score', 'structure_score',
+      'learnability_score', 'label_quality_score', 'primary_metric_cv',
+      'accuracy_cv', 'rmse_cv', 'runtime_sec'
+    ].includes(col)
+  ) {
+    const n = Number(value);
+    if (!Number.isNaN(n)) return n.toFixed(4).replace(/\\.0+$/,'').replace(/(\\.\\d*[1-9])0+$/,'$1');
+  }
+  return String(value);
+}
 
 function render() {
   const table = document.getElementById('leaderboard');
-  const sorted = [...data].sort((a,b) => {
+  const filtered = data.filter(row => {
+    if (!query) return true;
+    const q = query.toLowerCase();
+    return columns.some(c => String(row[c] ?? '').toLowerCase().includes(q));
+  });
+  const sorted = [...filtered].sort((a,b) => {
     const av = a[sortCol];
     const bv = b[sortCol];
     const an = parseFloat(av);
@@ -56,12 +167,33 @@ function render() {
     html += '<tr>';
     columns.forEach(c => {
       const cls = c === 'status' && row[c] === 'FAILED' ? 'failed' : (c === 'status' ? 'ok' : '');
-      html += `<td class=\"${cls}\">${row[c] ?? ''}</td>`;
+      const baseCls = [
+        'quality_score', 'cleanliness_score', 'structure_score',
+        'learnability_score', 'label_quality_score'
+      ].includes(c)
+        ? 'score num'
+        : (
+          [
+            'n_rows', 'n_cols', 'warnings_count', 'runtime_sec',
+            'primary_metric_cv', 'accuracy_cv', 'rmse_cv'
+          ].includes(c) ? 'num' : ''
+        );
+      const merged = [baseCls, cls].filter(Boolean).join(' ');
+      html += `<td class=\"${merged}\">${fmtValue(c, row[c])}</td>`;
     });
     html += '</tr>';
   });
   html += '</tbody>';
   table.innerHTML = html;
+
+  const ok = filtered.filter(r => String(r.status) === 'OK').length;
+  const failed = filtered.filter(r => String(r.status) === 'FAILED').length;
+  const scored = filtered.map(r => Number(r.quality_score)).filter(v => !Number.isNaN(v));
+  const avg = scored.length ? (scored.reduce((a,b) => a+b, 0) / scored.length) : 0;
+  document.getElementById('stat-datasets').textContent = String(filtered.length);
+  document.getElementById('stat-ok').textContent = String(ok);
+  document.getElementById('stat-failed').textContent = String(failed);
+  document.getElementById('stat-avg').textContent = avg.toFixed(2);
 }
 
 function setSort(col) {
@@ -69,6 +201,11 @@ function setSort(col) {
   else { sortCol = col; sortDesc = col === 'quality_score' || col === 'learnability_score'; }
   render();
 }
+
+document.getElementById('search').addEventListener('input', (e) => {
+  query = e.target.value || '';
+  render();
+});
 
 render();
 </script>
