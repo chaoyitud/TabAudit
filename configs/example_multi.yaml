@@ -1,0 +1,43 @@
+datasets:
+  - name: "openml_61_iris"
+    source: "openml"
+    dataset_id: 61
+    target: "auto"
+  - name: "kaggle_wine"
+    source: "kaggle"
+    slug: "zynicide/wine-reviews"
+    file: "winemag-data-130k-v2.csv"
+    target: "points"
+  - name: "local_bulk"
+    source: "local_dir"
+    path: "data/"
+    pattern: "*.csv"
+    target: "none"
+  - name: "local_single"
+    source: "local"
+    path: "data/demo.csv"
+    target: "y"
+
+global:
+  max_rows_profile: 200000
+  max_rows_model: 200000
+  max_columns: 500
+  random_seed: 42
+  cache_dir: ".cache/tab_audit"
+  reports_dir: "reports"
+  device: "auto"
+  model_backend_preference: ["xgboost", "lightgbm", "catboost", "sklearn"]
+  batch_concurrency: 1
+  unsup_learnability: "auto"
+  rcpl_target_cols: 10
+  rcpl_repeats: 3
+  rcpl_max_rows: 200000
+  rcpl_cv_folds: 3
+  rcpl_seed: 42
+  rcpl_max_cat_card: 200
+  rcpl_skip_id_threshold: 0.98
+  scoring_weights:
+    cleanliness: 0.35
+    structure: 0.25
+    learnability: 0.25
+    label_quality: 0.15

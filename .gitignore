@@ -1,0 +1,41 @@
+# Python cache/build artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.dylib
+*.egg-info/
+.eggs/
+build/
+dist/
+pip-wheel-metadata/
+
+# Test/tool caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+.coverage
+.coverage.*
+coverage.xml
+.pylint.d/
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+.python-version
+
+# Local runtime/cache data
+.cache/
+.uv-cache/
+reports/
+reports*/
+reports_*/
+*.log
+
+# OS/editor noise
+.DS_Store
+.idea/
+.vscode/
