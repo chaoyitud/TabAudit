@@ -20,6 +20,7 @@
 
 <p align="center">
   <a href="#quickstart-uv-recommended">Quickstart</a> •
+  <a href="docs/METRICS.md">Metrics</a> •
   <a href="#what-you-get">Artifacts</a> •
   <a href="#scoring-model">Scoring</a> •
   <a href="#multi-dataset-batch">Batch</a>
