@@ -137,6 +137,38 @@ def _write_failure_report(spec: DatasetSpec, out_dir: str, exc: Exception) -> di
     return _summary_row_from_report(report, spec.source)
 
 
+def _minimal_failure_result(spec: DatasetSpec, exc: Exception) -> tuple[dict[str, Any], dict[str, Any]]:
+    report = {
+        "dataset_slug": stable_slug(spec.name),
+        "scores": {"quality_score": None},
+        "basic_stats": {"n_rows": None, "n_cols": None},
+        "warnings": [],
+        "errors": [f"{exc.__class__.__name__}: {exc}"],
+        "status": "FAILED",
+    }
+    row = {
+        "dataset_slug": stable_slug(spec.name),
+        "dataset_name": spec.name,
+        "source": spec.source,
+        "target": _normalize_target_option(spec.target),
+        "status": "FAILED",
+        "n_rows": None,
+        "n_cols": None,
+        "quality_score": None,
+        "cleanliness_score": None,
+        "structure_score": None,
+        "learnability_score": None,
+        "label_quality_score": None,
+        "warnings_count": 0,
+        "errors_count": 1,
+        "backend": None,
+        "device": None,
+        "runtime_sec": None,
+        "error_message": f"{exc.__class__.__name__}: {exc}",
+    }
+    return report, row
+
+
 def _evaluate_one(
     spec: DatasetSpec,
     global_cfg: GlobalConfig,
@@ -433,16 +465,20 @@ def _run_batch(
             )
         except Exception as exc:
             logger.exception("Dataset %s failed: %s", spec.name, exc)
-            row = _write_failure_report(spec, out, exc)
-            report = {
-                "dataset_slug": row["dataset_slug"],
-                "scores": {"quality_score": None},
-                "basic_stats": {"n_rows": None, "n_cols": None},
-                "warnings": [],
-                "errors": [row.get("error_message")],
-                "status": "FAILED",
-            }
-            return report, row
+            try:
+                row = _write_failure_report(spec, out, exc)
+                report = {
+                    "dataset_slug": row["dataset_slug"],
+                    "scores": {"quality_score": None},
+                    "basic_stats": {"n_rows": None, "n_cols": None},
+                    "warnings": [],
+                    "errors": [row.get("error_message")],
+                    "status": "FAILED",
+                }
+                return report, row
+            except Exception as write_exc:
+                logger.exception("Failure report write also failed for %s: %s", spec.name, write_exc)
+                return _minimal_failure_result(spec, write_exc)
 
     max_workers = max(1, int(cfg.batch_concurrency))
     with Progress(
@@ -458,7 +494,11 @@ def _run_batch(
         if max_workers == 1:
             for spec in specs:
                 progress.update(task, description=f"[cyan]Evaluating {spec.name}")
-                report, row = worker(spec)
+                try:
+                    report, row = worker(spec)
+                except Exception as exc:  # extreme guard: never let one dataset abort the batch
+                    logger.exception("Unexpected worker failure for %s: %s", spec.name, exc)
+                    report, row = _minimal_failure_result(spec, exc)
                 summary_rows.append(row)
                 _print_result(report)
                 progress.advance(task)
@@ -467,7 +507,11 @@ def _run_batch(
                 futures = {pool.submit(worker, spec): spec for spec in specs}
                 for future in as_completed(futures):
                     spec = futures[future]
-                    report, row = future.result()
+                    try:
+                        report, row = future.result()
+                    except Exception as exc:  # extreme guard for thread-level failures
+                        logger.exception("Unexpected future failure for %s: %s", spec.name, exc)
+                        report, row = _minimal_failure_result(spec, exc)
                     summary_rows.append(row)
                     _print_result(report)
                     progress.update(task, description=f"[cyan]Completed {spec.name}")
