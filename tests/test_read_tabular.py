@@ -21,3 +21,12 @@ def test_read_tabular_mixed_types_and_target(tmp_path):
 
     schema = run_schema_checks(df, target="target", max_columns=500, min_rows_warn=2)
     assert schema["errors"] == []
+
+
+def test_read_tabular_supports_pq_suffix(tmp_path):
+    path = tmp_path / "sample.pq"
+    original = pd.DataFrame({"x": [1, 2], "y": ["a", "b"]})
+    original.to_parquet(path, index=False)
+
+    loaded = read_tabular(path)
+    assert loaded.equals(original)

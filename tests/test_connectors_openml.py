@@ -8,6 +8,21 @@ import pandas as pd
 from tab_audit.connectors.openml_connector import fetch_openml_dataset
 
 
+def test_fetch_openml_dataset_prefers_local_cache_dir(monkeypatch, tmp_path):
+    ds_dir = tmp_path / "datasets" / "1002"
+    ds_dir.mkdir(parents=True)
+    local_pq = ds_dir / "dataset_1002.pq"
+    pd.DataFrame({"a": [1, 2], "b": [3, 4]}).to_parquet(local_pq, index=False)
+
+    monkeypatch.setenv("TABAUDIT_OPENML_DATASETS_DIR", str(tmp_path / "datasets"))
+    monkeypatch.delitem(sys.modules, "openml", raising=False)
+
+    out = fetch_openml_dataset(dataset_id=1002, cache_dir=str(tmp_path))
+    assert out["data_path"] == str(local_pq)
+    assert out["metadata"]["source"] == "openml_local_cache"
+    assert out["default_target"] is None
+
+
 def test_fetch_openml_dataset_and_cache(monkeypatch, tmp_path):
     calls: dict[str, object] = {}
 

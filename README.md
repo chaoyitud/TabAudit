@@ -103,6 +103,10 @@ tabaudit evaluate local --path data/my.csv --target none --unsup-learnability on
 # OpenML
 tabaudit evaluate openml --dataset-id 61 --target auto --out reports/
 
+# Prefer local OpenML cache by dataset id (fallback to online fetch)
+export TABAUDIT_OPENML_DATASETS_DIR=~/TabDPT/data/openml_cache/org/openml/www/datasets
+tabaudit evaluate openml --dataset-id 1002 --target auto --out reports/
+
 # Kaggle
 tabaudit evaluate kaggle --dataset zynicide/wine-reviews --file winemag-data-130k-v2.csv --target auto --out reports/
 ```

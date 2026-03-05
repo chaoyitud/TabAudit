@@ -4,6 +4,7 @@ import importlib.util
 import subprocess
 from dataclasses import asdict
 
+import numpy as np
 import pandas as pd
 
 from tab_audit.modeling import catboost_backend, lightgbm_backend, sklearn_backend, xgboost_backend
@@ -15,6 +16,7 @@ def _module_available(name: str) -> bool:
 
 
 _CUDA_AVAILABLE: bool | None = None
+_GPU_BACKEND_USABLE: dict[str, bool] = {}
 
 
 def detect_cuda_available() -> bool:
@@ -30,6 +32,68 @@ def detect_cuda_available() -> bool:
         return False
 
 
+def _probe_gpu_backend(name: str) -> bool:
+    cached = _GPU_BACKEND_USABLE.get(name)
+    if cached is not None:
+        return cached
+
+    try:
+        X = np.array([[0.0], [1.0], [2.0], [3.0]], dtype=float)
+        y_cls = np.array([0, 1, 0, 1], dtype=int)
+
+        if name == "xgboost":
+            import xgboost as xgb
+
+            model = xgb.XGBClassifier(
+                n_estimators=1,
+                max_depth=1,
+                learning_rate=0.3,
+                tree_method="hist",
+                device="cuda",
+                n_jobs=1,
+                verbosity=0,
+            )
+            model.fit(X, y_cls)
+            _GPU_BACKEND_USABLE[name] = True
+            return True
+
+        if name == "lightgbm":
+            import lightgbm as lgb
+
+            model = lgb.LGBMClassifier(
+                n_estimators=1,
+                num_leaves=7,
+                learning_rate=0.3,
+                device_type="gpu",
+                n_jobs=1,
+                verbosity=-1,
+            )
+            model.fit(X, y_cls)
+            _GPU_BACKEND_USABLE[name] = True
+            return True
+
+        if name == "catboost":
+            from catboost import CatBoostClassifier
+
+            model = CatBoostClassifier(
+                iterations=1,
+                depth=2,
+                learning_rate=0.3,
+                task_type="GPU",
+                thread_count=1,
+                verbose=False,
+            )
+            model.fit(X, y_cls)
+            _GPU_BACKEND_USABLE[name] = True
+            return True
+    except Exception:
+        _GPU_BACKEND_USABLE[name] = False
+        return False
+
+    _GPU_BACKEND_USABLE[name] = False
+    return False
+
+
 def select_backend(device: str, preferences: list[str]) -> tuple[str, str, list[str]]:
     warnings: list[str] = []
     wants_cuda = device == "cuda" or (device == "auto" and detect_cuda_available())
@@ -37,10 +101,19 @@ def select_backend(device: str, preferences: list[str]) -> tuple[str, str, list[
     if wants_cuda:
         for pref in preferences:
             if pref == "xgboost" and _module_available("xgboost"):
+                if not _probe_gpu_backend("xgboost"):
+                    warnings.append("xgboost installed but CUDA backend unusable; trying next backend")
+                    continue
                 return "xgboost", "cuda", warnings
             if pref == "lightgbm" and _module_available("lightgbm"):
+                if not _probe_gpu_backend("lightgbm"):
+                    warnings.append("lightgbm installed but CUDA backend unusable; trying next backend")
+                    continue
                 return "lightgbm", "cuda", warnings
             if pref == "catboost" and _module_available("catboost"):
+                if not _probe_gpu_backend("catboost"):
+                    warnings.append("catboost installed but CUDA backend unusable; trying next backend")
+                    continue
                 return "catboost", "cuda", warnings
         warnings.append("No GPU backend available; falling back to sklearn CPU backend")
         return "sklearn", "cpu", warnings

@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pandas as pd
 
-SUPPORTED_SUFFIXES = {".csv", ".parquet", ".json", ".jsonl", ".tsv"}
+SUPPORTED_SUFFIXES = {".csv", ".parquet", ".pq", ".json", ".jsonl", ".tsv"}
 ENCODING_CANDIDATES = ["utf-8", "utf-8-sig", "latin-1"]
 
 
@@ -72,7 +72,7 @@ def read_tabular(
     if suffix in {".csv", ".tsv"}:
         forced_sep = "\t" if suffix == ".tsv" and sep is None else sep
         return _read_csv_with_fallback(p, max_rows=max_rows, chunksize=chunksize, sep=forced_sep)
-    if suffix == ".parquet":
+    if suffix in {".parquet", ".pq"}:
         df = pd.read_parquet(p)
         return df.head(max_rows) if max_rows is not None else df
     if suffix == ".jsonl":
